@@ -1,0 +1,115 @@
+name: Release
+
+# Tag-driven: pushing v0.1.0 builds installers and publishes the release.
+#
+# Publishing is automatic, so **the tag is the point of no return** — by the
+# time this runs, the decision to distribute has already been made. A build
+# from this repo bundles the Live2D Cubism SDK, and distributing it requires
+# agreeing to Live2D's SDK Release License, so confirm that before tagging
+# rather than after. See RELEASE.md.
+#
+# A tag ending in a hyphen (v0.2.0-beta.1) publishes as a pre-release, which is
+# the safer thing to reach for when unsure.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to build (must already exist)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: release/*.exe
+          - os: macos-latest
+            artifact: release/*.dmg
+          - os: ubuntu-latest
+            artifact: release/*.AppImage
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Nothing reaches the public download without passing these. The smoke
+      # test is deliberately not here: it is known to be intermittently flaky
+      # (see ROADMAP.md), and a release that fails at random is worse than one
+      # that ships without an end-to-end check the CI workflow already runs on
+      # every push to main.
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: Package
+        run: npx electron-builder --config electron-builder.yml --publish never
+        env:
+          # electron-builder reads this to attach releases; we publish manually.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.os }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      # On a tag push `github.ref_name` is the tag. On a manual run it is the
+      # branch the workflow was started from, which would name the release
+      # "main" and attach the installers to the wrong thing.
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          # Anything after a hyphen in the tag marks a pre-release, so
+          # v0.2.0-beta.1 never lands as a stable download by accident.
+          prerelease: ${{ contains(env.TAG, '-') }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: artifacts/**
+          body: |
+            ## Cài đặt
+
+            | Hệ điều hành | File |
+            |---|---|
+            | Windows | `.exe` (NSIS installer) |
+            | macOS | `.dmg` |
+            | Linux | `.AppImage` |
+
+            Installer **chưa được ký số**, nên Windows SmartScreen sẽ cảnh báo ở lần chạy
+            đầu — chọn "More info" → "Run anyway".
+
+            ---
+
+            Bản build này nhúng Live2D Cubism Core và model mẫu Hiyori © Live2D Inc., dùng
+            theo [SDK Release License](https://www.live2d.com/en/sdk/license/) và Free
+            Material License. Chi tiết: [THIRDPARTY.md](THIRDPARTY.md).

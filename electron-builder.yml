@@ -1,0 +1,61 @@
+# Packaging config for `npm run package`.
+#
+# Note on licensing: any installer built from this repo bundles the Live2D
+# Cubism Core and the Hiyori sample model. Distributing it publicly requires
+# agreeing to Live2D's SDK Release License — see THIRDPARTY.md.
+
+appId: com.nguyenkhanh.live2d-companion-studio
+productName: Live2D Companion Studio
+copyright: Copyright © 2026 NguyenKhanh. Live2D Cubism SDK © Live2D Inc.
+
+directories:
+  output: release
+  buildResources: build
+
+# `out/` is what electron-vite produces; everything the app reads at runtime has
+# to be listed here or it will be missing from the installed app.
+files:
+  - out/**/*
+  - package.json
+
+# The sample model ships unpacked so a first run has something to open. Kept out
+# of the asar because the app reads it through the normal filesystem API when
+# importing, and asar paths do not behave like real directories there.
+extraResources:
+  - from: resources/sample-models
+    to: sample-models
+  - from: THIRDPARTY.md
+    to: THIRDPARTY.md
+  - from: LICENSE
+    to: LICENSE
+
+asar: true
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  # No signing configured: unsigned builds trigger SmartScreen on first run.
+  # Set CSC_LINK / CSC_KEY_PASSWORD in CI to sign.
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  # The workspace lives in Documents, not AppData, so an uninstall never takes
+  # the user's edited models with it.
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  category: public.app-category.graphics-design
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  category: Graphics
+
+publish: null

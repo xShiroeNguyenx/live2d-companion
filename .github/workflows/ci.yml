@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # postinstall runs sync:core and build:framework-types, so the vendored
+      # SDK is prepared as a side effect of installing.
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+  smoke:
+    name: End-to-end smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      # Electron needs an X server even with `show: false`, and the driver
+      # already enables SwiftShader for machines with no GPU.
+      #
+      # Retried because the run is known to be intermittently flaky (~1 in 8 on
+      # a fast machine): the expression-capture step occasionally sees the
+      # default pose instead of the posed one. Tracked in ROADMAP.md under
+      # technical debt. `continue-on-error` is deliberately NOT used — a run
+      # that fails twice is a real signal and should fail the build.
+      - name: Smoke test
+        run: xvfb-run --auto-servernum npm run smoke || xvfb-run --auto-servernum npm run smoke
+
+      # The driver writes a capture of the rendered model; keeping it makes a
+      # rendering regression visible without reproducing the run locally.
+      - name: Upload capture
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-capture
+          path: .smoke/
+          if-no-files-found: ignore
+          retention-days: 7

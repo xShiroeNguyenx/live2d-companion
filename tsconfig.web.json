@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "strict": true,
+    "noImplicitOverride": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "paths": {
+      "@shared/*": ["./src/shared/*"],
+      "@renderer/*": ["./src/renderer/*"],
+      // App code type-checks the framework through generated declarations
+      // (`npm run build:framework-types`), so the framework's own looser source
+      // never enters this strict program. Vite still bundles the real
+      // TypeScript sources — see the alias in electron.vite.config.ts — which is
+      // what lets us patch the framework under vendor/patches.
+      "@framework/*": ["./vendor/cubism-web-framework/dist/*"]
+    }
+  },
+  "include": [
+    "src/renderer/**/*.ts",
+    "src/renderer/**/*.tsx",
+    "src/shared/**/*.ts",
+    "src/preload/index.d.ts",
+    "vendor/live2dcubismcore/live2dcubismcore.d.ts"
+  ]
+}

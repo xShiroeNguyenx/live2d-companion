@@ -1,0 +1,25 @@
+{
+  // The vendored Cubism framework is checked as its own project, using the
+  // compiler settings it was written against (target es6, no strict flags, no
+  // noImplicitOverride). Mixing it into the app's program would either force
+  // hundreds of errors in code we do not own, or force the app to give up
+  // strictness. Vite/esbuild transpiles it without type checking either way.
+  //
+  // `npm run typecheck` runs this too, so an SDK upgrade that genuinely breaks
+  // still gets caught — just reported separately from app errors.
+  "compilerOptions": {
+    "target": "ES6",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2015", "DOM", "DOM.Iterable"],
+    "strict": false,
+    "noImplicitAny": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "noEmit": true
+  },
+  "include": [
+    "vendor/cubism-web-framework/src/**/*.ts",
+    "vendor/live2dcubismcore/live2dcubismcore.d.ts"
+  ]
+}

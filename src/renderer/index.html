@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws:"
+    />
+    <title>Live2D Companion Studio</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!--
+      The Cubism Core is a classic script that assigns `window.Live2DCubismCore`,
+      and the framework reads that global at module scope. It therefore has to
+      run before the module bundle, as a plain (non-module) script — importing it
+      from the bundle puts it in module scope where the framework cannot see it.
+    -->
+    <script src="/live2dcubismcore.js"></script>
+    <script type="module" src="./index.tsx"></script>
+  </body>
+</html>
