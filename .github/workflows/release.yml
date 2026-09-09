@@ -49,13 +49,19 @@ jobs:
 
       - run: npm ci
 
-      # Nothing reaches the public download without passing these. The smoke
-      # test is deliberately not here: it is known to be intermittently flaky
-      # (see ROADMAP.md), and a release that fails at random is worse than one
-      # that ships without an end-to-end check the CI workflow already runs on
-      # every push to main.
-      - run: npm run typecheck
+      # Nothing reaches the public download without passing this. The smoke test
+      # is deliberately not here: it is known to be intermittently flaky (see
+      # ROADMAP.md), and a release that fails at random is worse than one that
+      # ships without an end-to-end check the CI workflow already runs on every
+      # push to main.
       - run: npm test
+
+      # electron-builder only bundles what is already on disk. Without this the
+      # asar ships empty and packaging dies late with "out/main/index.js was not
+      # found in this archive" — the entry point named in package.json.
+      #
+      # `npm run build` runs the typecheck itself, so there is no separate step.
+      - run: npm run build
 
       - name: Package
         run: npx electron-builder --config electron-builder.yml --publish never
