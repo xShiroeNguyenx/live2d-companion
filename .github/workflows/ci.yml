@@ -59,6 +59,26 @@ jobs:
           sudo apt-get install -y --no-install-recommends libasound2t64 \
             || sudo apt-get install -y --no-install-recommends libasound2
 
+      # Chromium's SUID sandbox helper has to be root-owned with the setuid bit,
+      # but npm unpacks it as the runner user. Electron then aborts before doing
+      # anything: "The SUID sandbox helper binary was found, but is not
+      # configured correctly" — the message goes on to state the ownership it
+      # wants, which is what these two commands give it.
+      #
+      # Granting the permissions rather than passing --no-sandbox keeps the smoke
+      # test running under the same sandboxing the shipped app uses; disabling it
+      # would let a sandbox-related regression through unnoticed.
+      - name: Fix Chromium sandbox permissions
+        run: |
+          sandbox=node_modules/electron/dist/chrome-sandbox
+          if [ ! -f "$sandbox" ]; then
+            echo "::error::$sandbox not found — Electron's layout changed?"
+            ls -la node_modules/electron/dist | head -20
+            exit 1
+          fi
+          sudo chown root:root "$sandbox"
+          sudo chmod 4755 "$sandbox"
+
       # Electron needs an X server even with `show: false`, and the driver
       # already enables SwiftShader for machines with no GPU.
       #

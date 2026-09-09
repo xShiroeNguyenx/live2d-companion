@@ -71,10 +71,12 @@ Thứ tự ưu tiên:
 
 ## Nợ kỹ thuật
 
-- **Smoke test còn flaky (~1/8 lần).** Bước capture biểu cảm thỉnh thoảng đọc được dáng
-  mặc định thay vì dáng vừa pose, nên `captureExpression` trả rỗng và test fail. Đã thu hẹp
-  nhiều bằng cách chờ theo điều kiện thay vì chờ mù, và bằng việc `probeOpacities` khôi
-  phục cả hai buffer tham số, nhưng chưa dứt điểm — nguyên nhân còn lại chưa xác định. CI
+- **Smoke test còn flaky (~1/8 lần), ở nhiều bước.** Đã thấy hai kiểu fail: capture biểu
+  cảm đọc được dáng mặc định thay vì dáng vừa pose, và seek motion không làm đổi giá trị
+  tham số. Cả hai đều tự pass khi chạy lại. Điểm chung là driver giả định một thao tác đã
+  có hiệu lực sau một khoảng chờ cố định, trong khi render loop chưa chắc đã chạy frame
+  nào. Đã thu hẹp bằng cách chờ theo điều kiện ở bước capture và bằng việc
+  `probeOpacities` khôi phục cả hai buffer tham số, nhưng các bước khác vẫn chờ mù. CI
   chạy lại một lần trước khi báo đỏ. **Phải sửa dứt điểm trước khi tin vào CI như một cổng
   chất lượng.**
 - **`electron-updater` đang là dependency nhưng không dùng ở đâu** (`grep` trong `src/`
