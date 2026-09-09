@@ -9,6 +9,7 @@
  * Usage: npm run build && npm run smoke
  */
 const path = require('node:path');
+const fs = require('node:fs');
 const { spawn } = require('node:child_process');
 
 const projectRoot = path.resolve(__dirname, '..');
@@ -23,10 +24,37 @@ const electronBinary = path.join(
 const env = { ...process.env, NODE_ENV: 'production' };
 delete env.ELECTRON_RUN_AS_NODE;
 
+if (!fs.existsSync(electronBinary)) {
+  console.error(`SMOKE FAIL: no Electron binary at ${electronBinary}`);
+  console.error('Run `npm ci` first — the postinstall step downloads it.');
+  process.exit(1);
+}
+
 const child = spawn(electronBinary, [path.join(__dirname, 'smoke-driver.js')], {
   cwd: projectRoot,
   env,
   stdio: 'inherit'
 });
 
-child.on('exit', (code) => process.exit(code ?? 1));
+child.on('error', (error) => {
+  console.error(`SMOKE FAIL: could not start Electron — ${error.message}`);
+  process.exit(1);
+});
+
+child.on('exit', (code, signal) => {
+  // Electron exiting immediately with no output of its own almost always means
+  // a missing system library rather than a failed assertion — the driver prints
+  // its own diagnosis for everything else. On a bare CI image that is a silent
+  // exit code 1, which is what made this take so long to place the first time.
+  if (code !== 0) {
+    const how = signal ? `signal ${signal}` : `exit code ${code}`;
+    console.error(`SMOKE FAIL: Electron ended with ${how}.`);
+    if (process.platform === 'linux') {
+      console.error(
+        'On Linux this is usually a missing library: Electron needs libgtk-3,',
+        'libnss3, libasound2, libgbm and an X server (xvfb-run).'
+      );
+    }
+  }
+  process.exit(code ?? 1);
+});

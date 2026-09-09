@@ -45,6 +45,20 @@ jobs:
 
       - run: npm run build
 
+      # Ubuntu 24.04 runners ship xvfb but not the desktop libraries Electron
+      # links against, so the binary dies on startup before it prints anything
+      # — the job failed in one second with a bare exit code 1.
+      - name: Install Electron's runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 xauth \
+            libatk-bridge2.0-0 libdrm2 libgbm1
+          # ALSA was renamed in Ubuntu 24.04 (the 64-bit time_t transition), so
+          # accept either name rather than pinning the job to one release.
+          sudo apt-get install -y --no-install-recommends libasound2t64 \
+            || sudo apt-get install -y --no-install-recommends libasound2
+
       # Electron needs an X server even with `show: false`, and the driver
       # already enables SwiftShader for machines with no GPU.
       #
