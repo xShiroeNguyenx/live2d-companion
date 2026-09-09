@@ -1,0 +1,25 @@
+{
+  // Generates the `.d.ts` files under `dist/` that the app's strict tsconfig
+  // resolves `@framework/*` to. Re-run `npm run build:framework-types` after
+  // upgrading the vendored SDK or applying a patch that changes a signature.
+  //
+  // Declarations only: Vite compiles the actual `src/` TypeScript into the app
+  // bundle, so no JavaScript output is needed here.
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true
+  },
+  // The Core's ambient declarations are referenced by nearly every framework
+  // file but must stay outside `rootDir` so `dist/` mirrors `src/` exactly.
+  "files": ["../live2dcubismcore/live2dcubismcore.d.ts"],
+  "include": ["src/**/*.ts"]
+}

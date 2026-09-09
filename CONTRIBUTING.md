@@ -84,9 +84,19 @@ scripts/                sync-core, smoke-test, ui-shots
 
 ### Vendor
 
-`vendor/cubism-web-framework/` là source TypeScript của SDK (clone từ repo Live2D, branch
-`develop`, bản R5). Vendor thay vì dùng npm để có thể patch. **Mọi sửa đổi phải ghi vào
-`vendor/patches/`** và re-apply sau khi nâng SDK, rồi chạy `npm run build:framework-types`.
+`vendor/cubism-web-framework/` là source TypeScript của SDK Live2D (bản R5, commit
+`d4da0aa`), **commit thẳng vào repo này** chứ không phải submodule. Lý do: submodule chỉ
+lưu con trỏ, nên CI checkout ra thư mục rỗng và `npm ci` chết ngay ở postinstall khi
+`sync-core.js` không tìm thấy `Shaders/WebGL`. Commit thẳng cũng là điều kiện để patch
+được — vá vào submodule thì không commit được vào repo này.
+
+Vendor thay vì dùng npm để có thể patch. **Mọi sửa đổi phải ghi vào `vendor/patches/`** và
+re-apply sau khi nâng SDK, rồi chạy `npm run build:framework-types`.
+
+Nâng SDK: tải bản mới từ [CubismWebFramework](https://github.com/Live2D/CubismWebFramework),
+thay nội dung thư mục (giữ lại `tsconfig.emit.json` — file này của project, không phải của
+SDK), re-apply patch, chạy `npm run build:framework-types`, rồi cập nhật số bản trong
+[THIRDPARTY.md](THIRDPARTY.md).
 
 ## Năm cái bẫy đã gặp
 
