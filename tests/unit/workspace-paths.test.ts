@@ -17,7 +17,26 @@ function resolveWorkingFile(workingDir: string, relativePath: string): string {
   return absolute;
 }
 
-const workingDir = path.resolve('C:/ws/model-abc12345/working');
+/**
+ * A workspace path built for whichever platform the test runs on.
+ *
+ * Hard-coding `C:/ws/...` looked platform-neutral but is not: on Linux there is
+ * no drive letter, so `path.resolve` treats `C:` as an ordinary relative
+ * directory name and hangs the whole path off the working directory. Every
+ * assertion about the workspace boundary then measures something different from
+ * what it does on Windows — and the "absolute path escapes" case silently
+ * became a path *inside* the workspace, so it never threw and CI went red.
+ */
+const workingDir = path.resolve(path.sep, 'ws', 'model-abc12345', 'working');
+
+/**
+ * An absolute path that is definitely outside the workspace, on this platform.
+ *
+ * The whole point of the test is that resolution must not follow an absolute
+ * reference out of the sandbox, so the reference has to actually be absolute
+ * where the test runs.
+ */
+const escapingAbsolutePath = path.join(path.resolve(path.sep), 'elsewhere', 'secret.txt');
 
 describe('resolveWorkingFile', () => {
   it('resolves a plain file reference', () => {
@@ -42,9 +61,24 @@ describe('resolveWorkingFile', () => {
   });
 
   it('rejects an absolute path that escapes the workspace', () => {
-    expect(() => resolveWorkingFile(workingDir, 'C:/Windows/System32/x')).toThrow(
+    expect(() => resolveWorkingFile(workingDir, escapingAbsolutePath)).toThrow(
       /ngoài workspace/
     );
+  });
+
+  it('rejects a Windows drive-absolute path even where it is not absolute', () => {
+    // On Linux `C:/Windows/...` is a relative name, so resolution keeps it
+    // inside the workspace and the guard above cannot fire. A model3.json
+    // written on Windows can still carry such a reference, and creating a
+    // directory literally called `C:` on a Linux host is not what anyone means.
+    const resolved = path.resolve(workingDir, 'C:/Windows/System32/x');
+    if (resolved.startsWith(workingDir + path.sep)) {
+      expect(resolveWorkingFile(workingDir, 'C:/Windows/System32/x')).toBe(resolved);
+    } else {
+      expect(() => resolveWorkingFile(workingDir, 'C:/Windows/System32/x')).toThrow(
+        /ngoài workspace/
+      );
+    }
   });
 
   it('does not treat a sibling directory with a shared prefix as inside', () => {

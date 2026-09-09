@@ -27,7 +27,7 @@ diễn ra trên bản sao trong `Documents/Live2DCompanion/workspaces/`, có c�
 
 ## Cài và chạy
 
-Cần **Node.js 20+** và Windows/macOS/Linux có GPU (hoặc chấp nhận software rendering).
+Cần **Node.js 22.12+** và Windows/macOS/Linux có GPU (hoặc chấp nhận software rendering).
 
 ```bash
 git clone https://github.com/<user>/live2d-companion.git
@@ -81,7 +81,7 @@ vào thư mục đó là dùng được.
 ```bash
 npm run dev          # chạy chế độ dev
 npm run build        # typecheck 3 project + build production
-npm test             # unit test (163 test)
+npm test             # unit test (168 test)
 npm run smoke        # test đầu-cuối trên file thật: import → render → capture biểu cảm
                      #   → lưu → undo → cấu hình → kiểm tra → xuất
 npm run ui:shots     # chụp ảnh từng tab vào .smoke/
