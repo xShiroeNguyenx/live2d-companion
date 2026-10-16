@@ -1,16 +1,38 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { app } from 'electron';
+import { randomUUID } from 'node:crypto';
+import { nativeImage } from 'electron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type {
+  ChangeStorageRootResult,
   ImportProbe,
   ImportResult,
+  LibraryScan,
   ProjectManifest,
+  StorageMoveProgress,
+  StorageRootCandidate,
+  StorageUsage,
   WorkspaceFile,
   WorkspaceSummary
 } from '@shared/types/workspace';
 import type { Model3Json } from '@shared/types/live2d-files';
 import type { OpenedWorkspace, WriteJsonRequest } from '@shared/ipc-contract';
+import {
+  displayNameFor,
+  scanModelLibrary,
+  thumbnailTextureFor,
+  workspaceIdFor
+} from './modelLibrary';
+import {
+  describeFolder,
+  directorySize,
+  freeBytesAt,
+  moveFolder,
+  newRootProblem,
+  rootForPickedFolder
+} from './workspaceStorage';
+
+/** Edge of the square library thumbnails, sized for a 2x display. */
+const THUMBNAIL_SIZE = 96;
 
 const MANIFEST_NAME = '.l2dproj.json';
 const ORIGINAL_DIR = 'original';
@@ -39,11 +61,124 @@ async function exists(target: string): Promise<boolean> {
  * "revert" is always possible even after autosave has overwritten `working/`.
  */
 export class WorkspaceService {
-  private readonly rootDir: string;
+  private rootDir: string;
+  /** Set while workspaces are being moved; every write is refused until it clears. */
+  private moving = false;
 
-  constructor(rootDir?: string) {
-    this.rootDir =
-      rootDir ?? path.join(app.getPath('documents'), 'Live2DCompanion', 'workspaces');
+  /**
+   * @param rootDir Folder holding every workspace.
+   * @param persistRoot Saves a newly chosen root so the next start uses it.
+   */
+  constructor(
+    rootDir: string,
+    private readonly persistRoot: (rootDir: string) => Promise<void> = async () => undefined
+  ) {
+    this.rootDir = rootDir;
+  }
+
+  getStorageRoot(): string {
+    return this.rootDir;
+  }
+
+  /** Bytes used per workspace and in total, plus the free space left on that drive. */
+  async storageUsage(): Promise<StorageUsage> {
+    const workspaces = await this.listWorkspaces();
+    const workspaceBytes: Record<string, number> = {};
+    let totalBytes = 0;
+    for (const summary of workspaces) {
+      const bytes = await directorySize(summary.workspacePath);
+      workspaceBytes[summary.id] = bytes;
+      totalBytes += bytes;
+    }
+    return {
+      rootDir: this.rootDir,
+      totalBytes,
+      workspaceBytes,
+      freeBytes: await freeBytesAt(this.rootDir)
+    };
+  }
+
+  /** Turns a folder the user picked into the root that would be used, without applying it. */
+  async resolveStorageCandidate(picked: string): Promise<StorageRootCandidate> {
+    const rootDir = rootForPickedFolder(picked, await describeFolder(picked));
+    const problem = newRootProblem(this.rootDir, rootDir);
+    return problem ? { ok: false, error: problem } : { ok: true, rootDir };
+  }
+
+  /**
+   * Switches to a new workspace root, optionally moving every workspace there.
+   *
+   * Workspaces are moved one at a time, so a failure part-way leaves each one
+   * whole in exactly one place. The root switches even then, and the ones left
+   * behind are reported by id so the user knows where they are.
+   */
+  async changeStorageRoot(
+    newRoot: string,
+    moveExisting: boolean,
+    onProgress?: (progress: StorageMoveProgress) => void
+  ): Promise<ChangeStorageRootResult> {
+    const target = path.resolve(newRoot);
+    const problem = newRootProblem(this.rootDir, target);
+    if (problem) return { ok: false, rootDir: this.rootDir, moved: 0, failed: [], error: problem };
+    if (this.moving) {
+      return { ok: false, rootDir: this.rootDir, moved: 0, failed: [], error: 'Đang chuyển dữ liệu.' };
+    }
+
+    this.moving = true;
+    const failed: Array<{ id: string; error: string }> = [];
+    let moved = 0;
+    try {
+      await fs.mkdir(target, { recursive: true });
+      if (moveExisting) {
+        const workspaces = await this.listWorkspaces();
+        for (const [index, summary] of workspaces.entries()) {
+          onProgress?.({ done: index, total: workspaces.length, current: summary.displayName });
+          try {
+            await moveFolder(summary.workspacePath, path.join(target, path.basename(summary.workspacePath)));
+            moved += 1;
+          } catch (error) {
+            failed.push({ id: summary.id, error: error instanceof Error ? error.message : String(error) });
+          }
+        }
+        onProgress?.({ done: workspaces.length, total: workspaces.length, current: '' });
+      }
+      await this.persistRoot(target);
+      this.rootDir = target;
+      return { ok: true, rootDir: target, moved, failed };
+    } catch (error) {
+      return {
+        ok: false,
+        rootDir: this.rootDir,
+        moved,
+        failed,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    } finally {
+      this.moving = false;
+    }
+  }
+
+  /**
+   * Deletes a workspace: its edited copy, the pristine copy and the backups.
+   * The folder the model was imported from is not touched.
+   */
+  async deleteWorkspace(workspaceId: string): Promise<{ ok: boolean; error?: string }> {
+    try {
+      this.assertNotMoving();
+      const workspacePath = this.resolveWorkspace(workspaceId);
+      // Only ever remove a folder this app created; the manifest is the proof.
+      if (!(await this.readManifest(workspacePath))) {
+        return { ok: false, error: `Không phải workspace hợp lệ: ${workspaceId}` };
+      }
+      await fs.rm(workspacePath, { recursive: true, force: true });
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  private assertNotMoving(): void {
+    if (this.moving) throw new Error('Đang chuyển thư mục lưu trữ, hãy thử lại sau khi xong.');
   }
 
   /** Inspect a dropped folder or file without copying anything yet. */
@@ -91,6 +226,7 @@ export class WorkspaceService {
   /** Copy a model into a fresh workspace. The source is only read. */
   async importModel(modelSettingPath: string): Promise<ImportResult> {
     try {
+      this.assertNotMoving();
       const sourceDir = path.dirname(modelSettingPath);
       const settingRaw = await fs.readFile(modelSettingPath, 'utf8');
       const setting = JSON.parse(settingRaw) as Model3Json;
@@ -110,9 +246,8 @@ export class WorkspaceService {
         return { ok: false, error: 'File .moc3 không hợp lệ (sai magic header).' };
       }
 
-      const displayName = path.basename(modelSettingPath).replace(/\.model3\.json$/i, '');
-      const hash = createHash('sha1').update(sourceDir).digest('hex').slice(0, 8);
-      const workspaceId = `${this.slugify(displayName)}-${hash}`;
+      const displayName = displayNameFor(modelSettingPath);
+      const workspaceId = workspaceIdFor(modelSettingPath);
       const workspacePath = path.join(this.rootDir, workspaceId);
 
       await fs.mkdir(workspacePath, { recursive: true });
@@ -148,6 +283,88 @@ export class WorkspaceService {
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
+  }
+
+  /**
+   * Lists every model under a folder of many models, marking the ones already
+   * imported. Only reads directory listings, so a library of hundreds is quick.
+   */
+  async scanLibrary(rootDir: string): Promise<LibraryScan> {
+    try {
+      const stat = await fs.stat(rootDir);
+      if (!stat.isDirectory()) {
+        return { ok: false, rootDir, models: [], truncated: false, error: 'Hãy chọn một thư mục.' };
+      }
+      const [walk, imported] = await Promise.all([
+        scanModelLibrary(rootDir),
+        this.listWorkspaces()
+      ]);
+      const byId = new Map(imported.map((summary) => [summary.id, summary]));
+      return {
+        ok: true,
+        rootDir,
+        truncated: walk.truncated,
+        models: walk.models.map((model) => ({
+          ...model,
+          workspace: byId.get(workspaceIdFor(model.modelSettingPath))
+        }))
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        rootDir,
+        models: [],
+        truncated: false,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  /**
+   * Opens a library model: reuses its workspace when it was imported before,
+   * imports it otherwise.
+   *
+   * Reuse matters because `importModel` copies over `working/`, so clicking a
+   * model twice in the library would otherwise throw away the edits made to it.
+   */
+  async openOrImport(modelSettingPath: string): Promise<ImportResult> {
+    const workspacePath = this.resolveWorkspace(workspaceIdFor(modelSettingPath));
+    const manifest = await this.readManifest(workspacePath);
+    if (manifest && (await exists(path.join(workspacePath, WORKING_DIR, manifest.modelSettingFile)))) {
+      return {
+        ok: true,
+        workspace: {
+          id: manifest.id,
+          displayName: manifest.displayName,
+          workspacePath,
+          modelSettingFile: manifest.modelSettingFile,
+          lastOpenedAt: manifest.lastOpenedAt
+        }
+      };
+    }
+    return this.importModel(modelSettingPath);
+  }
+
+  /**
+   * A small preview of a library model's first texture, as a PNG data URL, or
+   * null when it has none.
+   *
+   * Uses the OS thumbnailer where there is one: it decodes off the main thread,
+   * where a full decode of a 4096px atlas would freeze the window for every row
+   * scrolled into view. Linux has no thumbnailer, so it falls back to a decode.
+   */
+  async libraryThumbnail(modelSettingPath: string): Promise<string | null> {
+    const texture = await thumbnailTextureFor(modelSettingPath);
+    if (!texture || !(await exists(texture))) return null;
+    const size = { width: THUMBNAIL_SIZE, height: THUMBNAIL_SIZE };
+    let image: Electron.NativeImage;
+    try {
+      image = await nativeImage.createThumbnailFromPath(texture, size);
+    } catch {
+      image = nativeImage.createFromPath(texture);
+      if (!image.isEmpty()) image = image.resize({ width: THUMBNAIL_SIZE, quality: 'good' });
+    }
+    return image.isEmpty() ? null : image.toDataURL();
   }
 
   async listWorkspaces(): Promise<WorkspaceSummary[]> {
@@ -201,6 +418,7 @@ export class WorkspaceService {
   /** Atomic write plus a rotating backup of the version being replaced. */
   async writeJsonFile(request: WriteJsonRequest): Promise<{ ok: boolean; error?: string }> {
     try {
+      this.assertNotMoving();
       const absolute = this.resolveWorkingFile(request.workspaceId, request.relativePath);
       // The app writes its own documents into subdirectories the imported model
       // has no reason to contain, so the path may not exist yet.
@@ -235,6 +453,7 @@ export class WorkspaceService {
     data: ArrayBuffer;
   }): Promise<{ ok: boolean; error?: string }> {
     try {
+      this.assertNotMoving();
       const absolute = this.resolveWorkingFile(request.workspaceId, request.relativePath);
       await fs.mkdir(path.dirname(absolute), { recursive: true });
       await this.backupExisting(request.workspaceId, request.relativePath, absolute, '.png');
@@ -295,7 +514,14 @@ export class WorkspaceService {
   }
 
   private resolveWorkspace(workspaceId: string): string {
-    if (workspaceId.includes('/') || workspaceId.includes('\\') || workspaceId.includes('..')) {
+    // An empty or `.` id would resolve to the root itself, which delete must never reach.
+    if (
+      !workspaceId ||
+      workspaceId === '.' ||
+      workspaceId.includes('/') ||
+      workspaceId.includes('\\') ||
+      workspaceId.includes('..')
+    ) {
       throw new Error(`Workspace id không hợp lệ: ${workspaceId}`);
     }
     return path.join(this.rootDir, workspaceId);
@@ -373,15 +599,5 @@ export class WorkspaceService {
     } finally {
       await handle.close();
     }
-  }
-
-  private slugify(value: string): string {
-    return (
-      value
-        .normalize('NFKD')
-        .replace(/[^\w.-]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .toLowerCase() || 'model'
-    );
   }
 }

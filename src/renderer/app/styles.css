@@ -330,6 +330,122 @@ body {
   background: var(--bg-elevated);
 }
 
+.explorer__item:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* A library can hold hundreds of models: it takes the free height and scrolls inside. */
+.explorer__library {
+  flex: 1 1 auto;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.explorer__library-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.explorer__library-head h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explorer__icon-button {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+}
+
+.explorer__icon-button:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.explorer__library-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.explorer__library-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+}
+
+/* Textures are mostly transparent atlases: a checkerboard shows their shape. */
+.explorer__library-thumb {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 4px;
+  overflow: hidden;
+  background:
+    repeating-conic-gradient(var(--bg-elevated) 0% 25%, transparent 0% 50%) 0 0 / 10px 10px,
+    var(--bg);
+}
+
+.explorer__library-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.explorer__library-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.explorer__library-name {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explorer__library-tag {
+  font-size: 10px;
+  color: var(--accent);
+}
+
+.explorer__library-dir {
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Beside a library the import history is secondary: kept short, scrolls inside. */
+.explorer__library ~ .explorer__recent {
+  flex: 0 1 auto;
+  max-height: 150px;
+}
+
 .explorer__meta {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -1972,3 +2088,58 @@ body {
 }
 
 
+
+/* Storage ---------------------------------------------------------------- */
+
+.explorer__storage {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: visible;
+}
+
+.explorer__storage-path {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.explorer__storage-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.explorer__recent-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.explorer__recent-row .explorer__item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.explorer__recent-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explorer__recent-size {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.explorer__icon-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}

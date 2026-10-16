@@ -1,8 +1,13 @@
 import type { ExportRequest, ExportResult } from './types/export';
 import type {
   ImportProbe,
+  ChangeStorageRootResult,
   ImportResult,
+  LibraryScan,
   ProjectManifest,
+  StorageMoveProgress,
+  StorageRootCandidate,
+  StorageUsage,
   WorkspaceFile,
   WorkspaceSummary
 } from './types/workspace';
@@ -14,6 +19,9 @@ import type {
 export const IpcChannels = {
   probeImport: 'workspace:probeImport',
   importModel: 'workspace:importModel',
+  scanLibrary: 'workspace:scanLibrary',
+  openOrImport: 'workspace:openOrImport',
+  libraryThumbnail: 'workspace:libraryThumbnail',
   listWorkspaces: 'workspace:list',
   openWorkspace: 'workspace:open',
   readWorkspaceFile: 'workspace:readFile',
@@ -24,6 +32,12 @@ export const IpcChannels = {
   pickExportFolder: 'dialog:pickExportFolder',
   exportModel: 'export:model',
   writeTexture: 'workspace:writeTexture',
+  deleteWorkspace: 'workspace:delete',
+  storageUsage: 'storage:usage',
+  pickStorageFolder: 'storage:pickFolder',
+  changeStorageRoot: 'storage:changeRoot',
+  revealStorageRoot: 'storage:reveal',
+  storageMoveProgress: 'storage:moveProgress',
 
 
   secretSet: 'secrets:set',
@@ -70,6 +84,12 @@ export interface CubismEditorStatus {
 export interface RendererApi {
   probeImport(folderOrFile: string): Promise<ImportProbe>;
   importModel(modelSettingPath: string): Promise<ImportResult>;
+  /** Lists every model under a folder of many models, without copying any. */
+  scanLibrary(rootDir: string): Promise<LibraryScan>;
+  /** Reuses the workspace of an already-imported model, imports it otherwise. */
+  openOrImport(modelSettingPath: string): Promise<ImportResult>;
+  /** Small preview of a library model's first texture as a data URL, null if none. */
+  libraryThumbnail(modelSettingPath: string): Promise<string | null>;
   listWorkspaces(): Promise<WorkspaceSummary[]>;
   openWorkspace(workspaceId: string): Promise<OpenedWorkspace>;
   readWorkspaceFile(workspaceId: string, relativePath: string): Promise<WorkspaceFile>;
@@ -81,6 +101,17 @@ export interface RendererApi {
   exportModel(request: ExportRequest): Promise<ExportResult>;
   /** Writes a PNG into the workspace, atomically and with a backup. */
   writeTexture(request: WriteTextureRequest): Promise<{ ok: boolean; error?: string }>;
+  /** Removes a workspace from disk. The folder it was imported from is untouched. */
+  deleteWorkspace(workspaceId: string): Promise<{ ok: boolean; error?: string }>;
+  /** Size of every workspace and the free space on their drive. Walks the files, so not instant. */
+  storageUsage(): Promise<StorageUsage>;
+  /** Asks for a folder to keep workspaces in; null when cancelled. Nothing changes yet. */
+  pickStorageFolder(): Promise<StorageRootCandidate | null>;
+  /** Switches the workspace folder, moving the existing workspaces there when asked. */
+  changeStorageRoot(rootDir: string, moveExisting: boolean): Promise<ChangeStorageRootResult>;
+  revealStorageRoot(): Promise<void>;
+  /** Subscribes to move progress; returns the unsubscribe function. */
+  onStorageMoveProgress(listener: (progress: StorageMoveProgress) => void): () => void;
   /** Resolves a dropped `File` to its real path (synchronous, preload-only API). */
   getPathForFile(file: File): string;
 

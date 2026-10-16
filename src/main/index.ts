@@ -3,6 +3,12 @@ import { BrowserWindow, app, shell } from 'electron';
 import { registerWorkspaceIpc } from './ipc/registerWorkspaceIpc';
 import { ExportService } from './services/ExportService';
 import { WorkspaceService } from './services/WorkspaceService';
+import {
+  defaultWorkspaceRoot,
+  pathExists,
+  readStorageSettings,
+  writeStorageSettings
+} from './services/workspaceStorage';
 
 const isDev = !app.isPackaged;
 
@@ -21,8 +27,30 @@ function resolveSampleModelDir(): string {
     : path.resolve(__dirname, '..', '..', 'resources', 'sample-models');
 }
 
+/**
+ * Packaged builds take their icon from the executable (electron-builder bakes
+ * `build/icon.png` in); unpackaged runs would otherwise show Electron's default.
+ */
+function resolveWindowIcon(): string | undefined {
+  return app.isPackaged ? undefined : path.resolve(__dirname, '..', '..', 'build', 'icon.png');
+}
+
+/**
+ * The workspace root chosen by the user, or the default when there is none.
+ *
+ * Settings live in userData, never in the workspace root itself, because the
+ * root is exactly the thing that can move.
+ */
+async function resolveWorkspaceRoot(): Promise<string> {
+  const settings = await readStorageSettings(app.getPath('userData'));
+  if (settings.workspaceRoot) return settings.workspaceRoot;
+  const legacyRoot = path.join(app.getPath('documents'), 'Live2DCompanion', 'workspaces');
+  return defaultWorkspaceRoot(legacyRoot, app.getPath('userData'), await pathExists(legacyRoot));
+}
+
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
+    icon: resolveWindowIcon(),
     width: 1440,
     height: 900,
     minWidth: 1024,
@@ -56,8 +84,10 @@ function createWindow(): BrowserWindow {
   return window;
 }
 
-void app.whenReady().then(() => {
-  const workspaces = new WorkspaceService();
+void app.whenReady().then(async () => {
+  const workspaces = new WorkspaceService(await resolveWorkspaceRoot(), (rootDir) =>
+    writeStorageSettings(app.getPath('userData'), { workspaceRoot: rootDir })
+  );
   registerWorkspaceIpc(workspaces, new ExportService(workspaces), resolveSampleModelDir());
 
   createWindow();

@@ -12,6 +12,9 @@ directories:
   output: release
   buildResources: build
 
+# 1024px PNG; electron-builder derives the .ico / .icns from it.
+icon: build/icon.png
+
 # `out/` is what electron-vite produces; everything the app reads at runtime has
 # to be listed here or it will be missing from the installed app.
 files:
